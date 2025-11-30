@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crawl4ai-scraper"
+version = "0.1.0"
+description = "Flexible web scraper with LLM-powered data extraction using crawl4ai and Gemini"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Federico De Ponte", email = "federico@scaile.tech" }
+]
+keywords = ["web-scraping", "llm", "gemini", "crawl4ai", "data-extraction", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "google-genai>=1.47.0",
+    "crawl4ai>=0.3.0",
+    "playwright>=1.40.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/federicodeponte/crawl4ai-scraper"
+Repository = "https://github.com/federicodeponte/crawl4ai-scraper"
+Issues = "https://github.com/federicodeponte/crawl4ai-scraper/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["crawl4ai_scraper"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -3,7 +3,7 @@
 import asyncio
 import os
 from dotenv import load_dotenv
-from scraper import FlexibleScraper
+from crawl4ai_scraper import FlexibleScraper
 
 load_dotenv()
 
