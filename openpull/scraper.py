@@ -1,13 +1,12 @@
 """Flexible web scraper with LLM-based extraction.
 
-Multi-page web scraping with LLM-based extraction using Gemini and crawl4ai.
+Multi-page web scraping with LLM-based extraction using crawl4ai.
+Supports multiple LLM backends: OpenRouter (default), Gemini, or any OpenAI-compatible API.
 """
 
 import json
-from typing import Any, Dict, List, Optional
-
-from google import genai
-from google.genai import types
+import os
+from typing import Any, Dict, List, Optional, Union
 
 
 class FlexibleScraperError(Exception):
@@ -19,34 +18,60 @@ class FlexibleScraperError(Exception):
 class FlexibleScraper:
     """Flexible web scraper with multi-page discovery and LLM extraction.
 
-    Uses crawl4ai for web crawling and Gemini for intelligent data extraction.
+    Uses crawl4ai for web crawling and configurable LLM for intelligent data extraction.
     Supports auto-discovery of relevant pages and structured data extraction.
+    
+    LLM Backends:
+    - OpenRouter (default): Pass openai_client with OpenRouter base_url
+    - Gemini: Pass api_key (legacy mode)
+    - Any OpenAI-compatible: Pass openai_client
     """
 
-    DEFAULT_MODEL = "gemini-2.5-flash"
+    DEFAULT_MODEL = "google/gemini-2.5-flash"  # OpenRouter model ID
 
-    def __init__(self, api_key: str):
-        """Initialize FlexibleScraper with Gemini API key.
+    def __init__(
+        self, 
+        api_key: Optional[str] = None,
+        openai_client: Optional[Any] = None,
+        model: Optional[str] = None,
+    ):
+        """Initialize FlexibleScraper with LLM backend.
 
         Args:
-            api_key: Google Generative AI API key
+            api_key: Google Generative AI API key (legacy mode, for direct Gemini)
+            openai_client: OpenAI-compatible client (e.g., OpenRouter, OpenAI)
+            model: Model to use for extraction (defaults to DEFAULT_MODEL)
 
         Raises:
-            FlexibleScraperError: If API key is missing or initialization fails
+            FlexibleScraperError: If no valid LLM backend is configured
         """
-        if not api_key:
-            raise FlexibleScraperError("GEMINI_API_KEY is required")
-        self.api_key = api_key
-        self._init_client()
+        self.model = model or self.DEFAULT_MODEL
+        self.openai_client = openai_client
+        self.gemini_client = None
+        
+        if openai_client:
+            # Use OpenAI-compatible client (OpenRouter, OpenAI, etc.)
+            self.use_openai = True
+        elif api_key:
+            # Legacy: Use direct Gemini API
+            self.use_openai = False
+            self.api_key = api_key
+            self._init_gemini_client()
+        else:
+            raise FlexibleScraperError(
+                "Either openai_client or api_key is required. "
+                "Recommended: Pass an OpenRouter client via openai_client parameter."
+            )
 
-    def _init_client(self) -> None:
-        """Initialize Gemini client.
+    def _init_gemini_client(self) -> None:
+        """Initialize Gemini client (legacy mode).
 
         Raises:
             FlexibleScraperError: If Gemini initialization fails
         """
         try:
-            self.client = genai.Client(api_key=self.api_key)
+            from google import genai
+            self.gemini_client = genai.Client(api_key=self.api_key)
         except Exception as e:
             raise FlexibleScraperError(f"Failed to initialize Gemini: {str(e)}")
 
@@ -203,7 +228,7 @@ class FlexibleScraper:
         prompt: str,
         schema: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Extract structured data from HTML using Gemini LLM."""
+        """Extract structured data from HTML using LLM (OpenRouter or Gemini)."""
         try:
             if schema:
                 user_prompt = f"""EXTRACTION TASK: {prompt}
@@ -225,21 +250,32 @@ HTML Content:
 Return the extracted data as a JSON object.
 """
 
-            config = types.GenerateContentConfig(
-                temperature=0,
-                max_output_tokens=8192,
-            )
+            if self.use_openai:
+                # Use OpenAI-compatible client (OpenRouter, etc.)
+                response = await self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": user_prompt}],
+                    temperature=0,
+                    max_tokens=8192,
+                )
+                response_text = response.choices[0].message.content or ""
+            else:
+                # Legacy: Use direct Gemini API
+                from google.genai import types
+                config = types.GenerateContentConfig(
+                    temperature=0,
+                    max_output_tokens=8192,
+                )
+                response = self.gemini_client.models.generate_content(
+                    model="gemini-2.5-flash",  # Direct Gemini model name
+                    contents=user_prompt,
+                    config=config,
+                )
+                if not response.text:
+                    raise ValueError("Content generation blocked or no content generated")
+                response_text = response.text
 
-            response = self.client.models.generate_content(
-                model=self.DEFAULT_MODEL,
-                contents=user_prompt,
-                config=config,
-            )
-
-            if not response.text:
-                raise ValueError("Content generation blocked or no content generated")
-
-            response_text = response.text.strip()
+            response_text = response_text.strip()
 
             # Clean markdown code blocks
             if response_text.startswith("```"):
@@ -285,21 +321,32 @@ Return ONLY a JSON array of the full URLs to visit, like:
 ["https://example.com/page1", "https://example.com/page2"]
 """
 
-            config = types.GenerateContentConfig(
-                temperature=0,
-                max_output_tokens=2048,
-            )
+            if self.use_openai:
+                # Use OpenAI-compatible client (OpenRouter, etc.)
+                response = await self.openai_client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": discovery_prompt}],
+                    temperature=0,
+                    max_tokens=2048,
+                )
+                response_text = response.choices[0].message.content or ""
+            else:
+                # Legacy: Use direct Gemini API
+                from google.genai import types
+                config = types.GenerateContentConfig(
+                    temperature=0,
+                    max_output_tokens=2048,
+                )
+                response = self.gemini_client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=discovery_prompt,
+                    config=config,
+                )
+                if not response.text:
+                    raise ValueError("Content generation blocked or no content generated")
+                response_text = response.text
 
-            response = self.client.models.generate_content(
-                model=self.DEFAULT_MODEL,
-                contents=discovery_prompt,
-                config=config,
-            )
-
-            if not response.text:
-                raise ValueError("Content generation blocked or no content generated")
-
-            response_text = response.text.strip()
+            response_text = response_text.strip()
 
             if response_text.startswith("```"):
                 lines = response_text.split("\n")[1:]
