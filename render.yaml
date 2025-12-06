@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: openpull-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt && playwright install chromium --with-deps
+    startCommand: python -m uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: GEMINI_API_KEY
+        sync: false
+    plan: starter
+    healthCheckPath: /health
+
